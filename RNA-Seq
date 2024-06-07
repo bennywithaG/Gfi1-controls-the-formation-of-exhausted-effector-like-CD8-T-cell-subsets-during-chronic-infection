@@ -1,0 +1,150 @@
+library(BiocManager)
+library(edgeR)
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+
+##load the count matrices
+mycounts<-c('KO1_Prog_count','KO2_Prog_count','3-KO-Prog_count','4-KO-Prog_count','KO1_DP_count','KO2_DP_count','3-KO-DP_count','4-KO-DP_count','KO_naiveA_count','KO_naiveB_count','KO1-naive_count','KO2-naive_count','WT1_Eff_count','WT2_Eff_count','2-WT-Eff_count','WT1_DP_count','WT2_DP_count','1-WT-DP_count','2-WT-DP_count','WT1_DN_count','WT2_DN_count','1-WT-DN_count','2-WT-DN_count','WT1_Prog_count','WT2_Prog_count','1-WT-Prog_count','2-WT-Prog_count','WT_naiveA_count','WT_naiveB_count','WT1-naive_count','WT2-naive_count')
+mylabels<-c('KO1_Prog','KO2_Prog','KO3_Prog','KO4_Prog','KO1_DP','KO2_DP','KO3_DP','KO4_DP','KO1_naive','KO2_naive','KO3_naive','KO4_naive','WT1_Eff','WT2_Eff','WT3_Eff','WT1_DP','WT2_DP','WT3_DP','WT4_DP','WT1_DN','WT2_DN','WT3_DN','WT4_DN','WT1_Prog','WT2_Prog','WT3_Prog','WT4_Prog','WT1_naive','WT2_naive','WT3_naive','WT4_naive')           
+myclass<-c('KO_Prog','KO_Prog','KO_Prog','KO_Prog','KO_DP','KO_DP','KO_DP','KO_DP','KO_naive','KO_naive','KO_naive','KO_naive','WT_Eff','WT_Eff','WT_Eff','WT_DP','WT_DP','WT_DP','WT_DP','WT_DN','WT_DN','WT_DN','WT_DN','WT_Prog','WT_Prog','WT_Prog','WT_Prog','WT_naive','WT_naive','WT_naive','WT_naive')
+batch<-c('1','1','2','2','1','1','2','2','1','1','2','2','1','1','2','1','1','2','2','1','1','2','2','1','1','2','2','1','1','2','2')
+cbind(mycounts, myclass, mylabels, batch)
+
+##create the DGE object
+Dats<-readDGE(files=mycounts, group=myclass, labels=mylabels)
+malos<-grep("^__", rownames(Dats))
+Dats<-Dats[-malos,]
+geneid<-rownames(Dats)
+Dtest<-DGEList(counts=Dats$counts, group = Dats$samples$group, genes =geneid)
+AveLogCPM<-aveLogCPM(Dtest)
+hist(AveLogCPM)
+
+##create the design matrix for differential analysis
+design<-model.matrix(~0+Dtest$samples$group+batch)
+colnames(design)<-c("KO_DP", "KO_naive", "KO_Prog", "WT_DN","WT_DP", "WT_Eff", "WT_naive", "WT_Prog" ,"batch2")
+
+##Filter out lowly expressed genes
+keep<-filterByExpr(Dtest, design)
+Dtest<-Dtest[keep, , keep.lib.sizes=FALSE]
+Dtest$samples
+AveLogCPM<-aveLogCPM(Dtest)
+hist(AveLogCPM)
+
+##calculate the normalization factor for libraries
+Dtest<-calcNormFactors(Dtest)
+Dtest$samples
+
+##generate 2 dimensional plot for distances between samples
+pch<-c(0,1,2,15,16,17,25,34)
+colors<-rep(c("darkgreen", "red", "blue", 'black', 'yellow'),4)
+plotMDS(Dtest, col=colors[Dtest$samples$group], pch = pch[Dtest$samples$group])
+legend("bottomleft", legend = levels(Dtest$samples$group), pch = pch, col = colors, ncol = 2)
+
+##Generate mean difference plot for samples
+plotMD(Dtest, column=1)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=2)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=3)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=4)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=5)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=6)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=7)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=8)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=9)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=10)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=11)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=12)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=13)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=14)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=15)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=16)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=17)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=18)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=19)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=20)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=21)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=22)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=23)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=24)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=25)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=26)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=27)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=28)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=29)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=30)
+abline(h=0, col="red", lty=2, lwd=2)
+plotMD(Dtest, column=31)
+abline(h=0, col="red", lty=2, lwd=2)
+dim(Dtest)
+
+##Estimate dispersion for the samples
+Dtest<-estimateDisp(Dtest, design, robust = TRUE)
+plotBCV(Dtest)
+
+##Generate a quasi-likelihood negative binomal distribution for the samples for differential analysis
+fit<-glmQLFit(Dtest, design, robust = TRUE)
+head(fit$coefficients)
+plotQLDisp(fit)
+summary(fit$df.prior)
+
+##Differential analysis
+
+restrains6<-makeContrasts(A3=WT_DP-WT_Prog,B3=WT_Eff-WT_Prog,C3=WT_DN-WT_Prog,D3=WT_DP-WT_Eff,E3=WT_DP-WT_DN,F3=WT_DN-WT_Eff,G3=KO_Prog-WT_Prog,H3=KO_DP-WT_Prog,I3=WT_DP-KO_Prog,J3=KO_DP-WT_DP,K3=WT_Eff-KO_Prog,L3=KO_DP-WT_Eff, M3=KO_DP-WT_DN,N3=WT_DN-KO_Prog,O3=KO_DP-KO_Prog,levels=design )
+res6<-glmQLFTest(fit, contrast = restrains6)
+is.restrains6<-decideTestsDGE(res6)
+summary(is.restrains6) #3042
+df_restrains6<-as.data.frame(topTags(res6,n=3042))
+write.csv(df_restrains6, file="allcompswtko.csv")
+
+##generate heatmap for select genes
+
+logcpmf<-cpm(Dtest$counts[,c(24:27,16:19,13:15,20:23)], prior.count = 2, log = TRUE)
+
+listofthings<-c("Tcf7","Tcf12","Tcf19","Ezh1","Ezh2","Id2","Id3","Irf5","Irf8","Hif1a","Zeb2","Spi1","Myb","Mybl2","Batf","Batf3","Arid4b","Prdm1","Pou2af1","Pou2f1","Tbx21","Stat4","Smad7","Hmgb1","Hmgb2","Hmgn1","Hmgn3","Runx3","Lef1","Ikzf2","Ikzf4","Tcf4","Foxm1")
+logcpmg<-logcpmf[listofthings,]
+coolmap(logcpmg, show.dendrogram = "column", keysiz=1.0,margins=c(7,5), labCol=FALSE, ColSideColors=c(rep("springgreen4",4),rep("mediumblue",4),rep("red",3),rep("black",4)),linkage.col = "none")
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog","Ly108+CX3CR1+","Effector","Term_Exh"), col = c("springgreen4","mediumblue","red","black"),fill=c("springgreen4","mediumblue","red","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
+
+listofthings2<-c("Fas","Cd44","Ccr10","Nt5e","Il7r","Tnfsf8","Xcl1","Cxcr5","Ccr6","Icos","Slamf6","Tgfbr3","Kit","Sell","Cd40","Ifngr2","Cd7","Cxcr6","Glp1r","Prf1","Ildr1","Tigit","Lag3","Il15ra","Il21r","Fasl",'Gzma',"Ccl5","Ccl3","Cd244","Adgrg1","Gzmk","Gzmb","Havcr2","Itgax","Cx3cr1","Ccr8","Klrc1","Klrg1","Cmklr1","S1pr5")
+logcpmg2<-logcpmf[listofthings2,]
+coolmap(logcpmg2, show.dendrogram = "column", keysiz=1.0, margins=c(7,5), labCol=FALSE, ColSideColors=c(rep("springgreen4",4),rep("mediumblue",4),rep("red",3),rep("black",4)),linkage.col = "none")
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog","Ly108+CX3CR1+","Effector","Term_Exh"), col = c("springgreen4","mediumblue","red","black"),fill=c("springgreen4","mediumblue","red","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
+
+logkowt<-cpm(Dtest$counts[,c(24:27,16:19,13:15,1:8)], prior.count=2,log=TRUE)
+
+logcpmg1ko<-logkowt[listofthings,]
+coolmap(logcpmg1ko, show.dendrogram = "column", keysiz=1.0, margins=c(7,5), linkage.col = "none",ColSideColors=c(rep("springgreen4",4),rep("mediumblue",4),rep("red",3),rep("goldenrod1",4),rep("black",4)),labCol=FALSE)
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog(WT)","Ly108+CX3CR1+(WT)","Effector(WT)","Prog(KO)","Ly108+CX3CR1+(KO)"), col = c("springgreen4","mediumblue","red","goldenrod1","black"),fill=c("springgreen4","mediumblue","red","goldenrod1","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
+
+logcpmg2ko<-logkowt[listofthings2,]
+coolmap(logcpmg2ko, show.dendrogram = "column", keysiz=1.0, margins=c(7,5), linkage.col = "none",ColSideColors=c(rep("springgreen4",4),rep("mediumblue",4),rep("red",3),rep("goldenrod1",4),rep("black",4)),labCol=FALSE)
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog(WT)","Ly108+CX3CR1+(WT)","Effector(WT)","Prog(KO)","Ly108+CX3CR1+(KO)"), col = c("springgreen4","mediumblue","red","goldenrod1","black"),fill=c("springgreen4","mediumblue","red","goldenrod1","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
