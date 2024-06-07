@@ -1,0 +1,289 @@
+
+
+library(edgeR)
+
+library(ggplot2)
+
+library(BiocManager)
+
+library(GenomicRanges)
+
+library(GenomicFeatures)
+
+library(GenomicAlignments)
+
+library(ChIPseeker)
+
+library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+
+library(clusterProfiler)
+
+library(ReactomePA)
+
+library(org.Mm.eg.db)
+
+library(ggupset)
+
+library(ggimage)
+
+library(dplyr)
+
+library(GreyListChIP)
+
+library(profileplyr)
+
+library(ggVennDiagram)
+
+ 
+
+##Load the count matrix
+
+count<-read.csv(file = "output.txt", sep = "\t", header = TRUE)
+
+rownames(count)<-count[,1]
+
+mylabels<-c("KO1_DP", "KO1_Prog", "KO2_DP", "KO2_Prog", "KO_naive1", "KO_naive2", "WT1_Exh", "WT1_DP", "WT1_Eff", "WT1_Prog", "WT2_Exh", "WT2_DP", "WT2_Eff", "WT2_Prog", "WT_naive1", "WT_naive2" )
+
+myclass<-c("KO_DP", "KO_Prog", "KO_DP", "KO_Prog", "KO_naive", "KO_naive", "WT_Exh", "WT_DP", "WT_Eff", "WT_Prog", "WT_Exh", "WT_DP", "WT_Eff", "WT_Prog", "WT_naive", "WT_naive")
+
+count2<-count[,c(7:22)]
+
+Dats<-DGEList(counts = count2, group=myclass)
+
+Dats
+
+Dats$samples
+
+ 
+
+##Create the design matrix for differential analysis
+
+design<-model.matrix(~0+Dats$samples$group)
+
+colnames(design)<-levels(Dats$samples$group)
+
+design
+
+ 
+
+##Filter out regions with low accessibility
+
+keep<-filterByExpr(Dats, design)
+
+summary(keep)
+
+Dats<-Dats[keep, , keep.lib.sizes=FALSE]
+
+AveLogCPM<-aveLogCPM(Dats)
+
+hist(AveLogCPM)
+
+ 
+
+##Calculate normalization factor for libraries
+
+Dats<-calcNormFactors(Dats)
+
+Dats$samples
+
+ 
+
+##Generate 2 dimensional scatter plot for distances between samples
+
+pch<-c(0,1,2,15,16,17,19,20)
+
+colors<-rep(c("darkgreen", "red", "blue", 'black'),2)
+
+plotMDS(Dats, col=colors[Dats$samples$group], pch = pch[Dats$samples$group])
+
+legend("topright", legend = levels(Dats$samples$group), pch = pch, col = colors, ncol = 2)
+
+ 
+
+##Estimate dispersion for samples
+
+Dats<-estimateDisp(Dats, design, robust = TRUE)
+
+plotBCV(Dats)
+
+ 
+
+##Generate a quasi-likelihood negative binomal distribution for the samples for differential analysis
+
+fit<-glmQLFit(Dats, design, robust = TRUE)
+
+head(fit$coefficients)
+
+plotQLDisp(fit)
+
+summary(fit$df.prior)
+
+ 
+
+##Differential analysis between samples.
+
+ 
+
+##are there differences between DP and Progenitor cells? 
+
+ 
+
+##The weights can be found from the design matrix
+
+design
+
+ 
+
+##Instead of using the weights as in "c(0,0,0,1,0,0,0,-1)", you can also first make the the contrast \
+
+## as in A_contrast<-makeContrasts(kovswtprog=WT_Prog-WT_DP, levels = design) then run the glmTreat(Fit, contrast=A_contrast)
+
+ 
+
+##What are the DACRs between DP and Progenitor cells?
+
+wtdpprog<-glmTreat(fit, contrast =c(0,0,0,1,0,0,0,-1), lfc = log2(1.2))
+
+topTags(wtdpprog)
+
+is.wtdpprog<-decideTestsDGE(wtdpprog) ##identifies which genes are significant 
+
+ 
+
+summary(is.wtdpprog) #Gives number of significantly unregulated and downregulated regions; 3218up and 633down
+
+reswtdpprog<-as.data.frame(topTags(wtdpprog, n=3851)) ##n is specified to only write the significant regions!
+
+ 
+
+head(reswtdpprog)
+
+ 
+
+##Create a new column named Geneid. Necessary for peak annotation
+
+reswtdpprog$Geneid<-rownames(reswtdpprog)
+
+ 
+
+##Append the Geneid, chromosome, start, and end for each peak 
+
+reswtdpprog.coord<-left_join(reswtdpprog, count[1:4],by="Geneid")
+
+ 
+
+##subset upregulated and downregulated DACRs
+
+reswtdpprogUP<-reswtdpprog.coord[reswtdpprog.coord$logFC>0,]
+
+reswtdpprogDOWN<-reswtdpprog.coord[reswtdpprog.coord$logFC<0,]
+
+ 
+
+##create GRanges objects for all Up and DOWN DACRs
+
+grwtdpprogUP<-GRanges(seqnames=reswtdpprogUP$Chr, ranges=IRanges(reswtdpprogUP$Start, reswtdpprogUP$End), strand = "*", mcols=data.frame(peakID=reswtdpprogUP$Geneid))
+
+grwtdpprogDOWN<-GRanges(seqnames=reswtdpprogDOWN$Chr, ranges=IRanges(reswtdpprogDOWN$Start, reswtdpprogDOWN$End), strand = "*", mcols=data.frame(peakID=reswtdpprogDOWN$Geneid))
+
+grwtdpprog<-GRanges(seqnames=reswtdpprog.coord$Chr, ranges=IRanges(reswtdpprog.coord$Start, reswtdpprog.coord$End), strand = "*", mcols=data.frame(peakID=reswtdpprog.coord$Geneid))
+
+ 
+
+##get the annotation package the mouse mm10 genome
+
+txdb<-TxDb.Mmusculus.UCSC.mm10.knownGene
+
+ 
+
+##peak annotation with chipseeker
+
+ 
+
+##create annotated peaks
+
+annot_wtdpprogUP<-annotatePeak(grwtdpprogUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+annot_wtdpprogDOWN<-annotatePeak(grwtdpprogDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+annot_wtdpprog<-annotatePeak(grwtdpprog, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+ 
+
+##create dataframe for annotated peaks
+
+dr_annot_wtdpprogUP<-as.data.frame(annot_wtdpprogUP)
+
+dr_annot_wtdpprogDOWN<-as.data.frame(annot_wtdpprogDOWN)
+
+dr_annot_wtdpprog<-as.data.frame(annot_wtdpprog)
+
+ 
+
+##Generate plot annopie plots
+
+plotAnnoPie(annot_wtdpprogUP)
+
+plotAnnoPie(annot_wtdpprogDOWN)
+
+ 
+
+##Determine GO enriched pathway
+
+pathway.GO_wtdpprogUP<-enrichGO(dr_annot_wtdpprogUP$geneId, org.Mm.eg.db, ont = "MF")
+
+pathway.GO_wtdpprogUP[1:20, c(1,2,7)]
+
+ 
+
+##Generate dotplot of enriched pathway
+
+dotplot(pathway.GO_wtdpprogUP, showCategory=15)
+
+ 
+
+##Generate venn diagram
+
+listsssb<-as.list(c(annot_wtdpprogUP,annot_wtdpprogDOWN, annot_wtprogeff))
+
+names(listsssb)<-c("DPvsProg-UP", "DPvsProg-DOWN", "EffvsProg")
+
+genessb<-lapply(listsssb, function(i) as.data.frame(i)$mcols.peakID )
+
+p1<-ggVennDiagram(genessb,label ="count",set_color=c("blue", "red", "black"),set_size = 8, label_size =8, edge_size = 1)
+
+p1+ scale_x_continuous(expand = expansion(mult = .4))+scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")
+
+ 
+
+##Identify regions that are different in the EffvsProg and DPvsProg comparison
+
+check<-setdiff(dr_annot_wtprogeff, dr_annot_wtdpprog)
+
+colnames(check)[6]<-"Geneid"
+
+check<-left_join(check, reswtprogeff[1:6], by="Geneid")
+
+ 
+
+##Generate heatmap based on DACRs between DP and Progenitor cells
+
+prpro<-cpm(Dats$counts[dr_annot_wtdpprog$Geneid,c(10,14,8,12,9,13,7,11)], prior.count = 2, log = TRUE)
+
+coolmap(prpro, show.dendrogram = "column", keysize=1.0, margins=c(7,5),labRow=FALSE, linkage.col = "none",labCol=FALSE, ColSideColors=c(rep("springgreen4",2),rep("mediumblue",2),rep("red",2), rep("black",2)),colsep=c(2,4,6),sepwidth=c(0.01,0.01))
+
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog","DP","Effector","Term_Exh"), col = c("springgreen4","mediumblue","red","black"),fill=c("springgreen4","mediumblue","red","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
+
+ 
+
+##Generate files for HOMER motif binding analysisof regions losing accessibility between DP and Progenitor
+
+getdpprogDOWN<-dr_annot_wtdpprogDOWN
+
+getdpprogDOWN$test<-"NA"
+
+getdpprogDOWN$test[getdpprogDOWN$geneStrand==1]<-"+"
+
+getdpprogDOWN$test[getdpprogDOWN$geneStrand==2]<-"-"
+
+getdpprogDOWN<-getdpprogDOWN[,c(6,1,2,3,19,4,5,7:18)]
