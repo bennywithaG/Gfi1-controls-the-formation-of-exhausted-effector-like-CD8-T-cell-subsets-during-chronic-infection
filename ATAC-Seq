@@ -1,289 +1,484 @@
-
-
 library(edgeR)
-
 library(ggplot2)
-
 library(BiocManager)
-
 library(GenomicRanges)
-
 library(GenomicFeatures)
-
 library(GenomicAlignments)
-
 library(ChIPseeker)
-
 library(TxDb.Mmusculus.UCSC.mm10.knownGene)
-
 library(clusterProfiler)
-
 library(ReactomePA)
-
 library(org.Mm.eg.db)
-
 library(ggupset)
-
 library(ggimage)
-
 library(dplyr)
-
 library(GreyListChIP)
-
 library(profileplyr)
-
 library(ggVennDiagram)
 
- 
-
 ##Load the count matrix
-
 count<-read.csv(file = "output.txt", sep = "\t", header = TRUE)
-
 rownames(count)<-count[,1]
-
 mylabels<-c("KO1_DP", "KO1_Prog", "KO2_DP", "KO2_Prog", "KO_naive1", "KO_naive2", "WT1_Exh", "WT1_DP", "WT1_Eff", "WT1_Prog", "WT2_Exh", "WT2_DP", "WT2_Eff", "WT2_Prog", "WT_naive1", "WT_naive2" )
-
 myclass<-c("KO_DP", "KO_Prog", "KO_DP", "KO_Prog", "KO_naive", "KO_naive", "WT_Exh", "WT_DP", "WT_Eff", "WT_Prog", "WT_Exh", "WT_DP", "WT_Eff", "WT_Prog", "WT_naive", "WT_naive")
-
 count2<-count[,c(7:22)]
-
 Dats<-DGEList(counts = count2, group=myclass)
-
 Dats
-
 Dats$samples
-
- 
 
 ##Create the design matrix for differential analysis
-
 design<-model.matrix(~0+Dats$samples$group)
-
 colnames(design)<-levels(Dats$samples$group)
-
 design
 
- 
-
-##Filter out regions with low accessibility
-
+##Filter out regions with low accessibility across all samples
 keep<-filterByExpr(Dats, design)
-
 summary(keep)
-
 Dats<-Dats[keep, , keep.lib.sizes=FALSE]
-
 AveLogCPM<-aveLogCPM(Dats)
-
 hist(AveLogCPM)
 
- 
-
 ##Calculate normalization factor for libraries
-
 Dats<-calcNormFactors(Dats)
-
 Dats$samples
 
- 
-
 ##Generate 2 dimensional scatter plot for distances between samples
-
 pch<-c(0,1,2,15,16,17,19,20)
-
 colors<-rep(c("darkgreen", "red", "blue", 'black'),2)
-
 plotMDS(Dats, col=colors[Dats$samples$group], pch = pch[Dats$samples$group])
-
 legend("topright", legend = levels(Dats$samples$group), pch = pch, col = colors, ncol = 2)
 
- 
-
 ##Estimate dispersion for samples
-
 Dats<-estimateDisp(Dats, design, robust = TRUE)
-
 plotBCV(Dats)
 
- 
-
 ##Generate a quasi-likelihood negative binomal distribution for the samples for differential analysis
-
 fit<-glmQLFit(Dats, design, robust = TRUE)
-
 head(fit$coefficients)
-
 plotQLDisp(fit)
-
 summary(fit$df.prior)
-
- 
 
 ##Differential analysis between samples.
 
- 
-
-##are there differences between DP and Progenitor cells? 
-
- 
-
-##The weights can be found from the design matrix
-
-design
-
- 
-
-##Instead of using the weights as in "c(0,0,0,1,0,0,0,-1)", you can also first make the the contrast \
-
-## as in A_contrast<-makeContrasts(kovswtprog=WT_Prog-WT_DP, levels = design) then run the glmTreat(Fit, contrast=A_contrast)
-
- 
-
-##What are the DACRs between DP and Progenitor cells?
-
+##Are there differences between WT Prog to Ly108+CX3CR1+ cells?
 wtdpprog<-glmTreat(fit, contrast =c(0,0,0,1,0,0,0,-1), lfc = log2(1.2))
-
 topTags(wtdpprog)
-
-is.wtdpprog<-decideTestsDGE(wtdpprog) ##identifies which genes are significant 
-
- 
-
-summary(is.wtdpprog) #Gives number of significantly unregulated and downregulated regions; 3218up and 633down
-
-reswtdpprog<-as.data.frame(topTags(wtdpprog, n=3851)) ##n is specified to only write the significant regions!
-
- 
-
+is.wtdpprog<-decideTestsDGE(wtdpprog)
+summary(is.wtdpprog) #yes 3218up and 633down
+reswtdpprog<-as.data.frame(topTags(wtdpprog, n=3851))
 head(reswtdpprog)
-
- 
-
-##Create a new column named Geneid. Necessary for peak annotation
-
 reswtdpprog$Geneid<-rownames(reswtdpprog)
-
- 
-
-##Append the Geneid, chromosome, start, and end for each peak 
-
 reswtdpprog.coord<-left_join(reswtdpprog, count[1:4],by="Geneid")
 
- 
+##Are there differences between WT Ly108+CX3CR1+ and Terminally exhausted cells? 
+wtdpexh<-glmTreat(fit, contrast =c(0,0,0,1,0,-1,0,-0), lfc = log2(1.2))
+topTags(wtdpexh)
+is.wtdpexh<-decideTestsDGE(wtdpexh)
+summary(is.wtdpexh) #yes 8221, 6672up, 1549 down
+reswtdpexh<-as.data.frame(topTags(wtdpexh, n=8221))
+head(reswtdpexh)
+reswtdpexh$Geneid<-rownames(reswtdpexh)
+reswtdpexh.coord<-left_join(reswtdpexh, count[1:4],by="Geneid")
 
-##subset upregulated and downregulated DACRs
+##Are there differences between WT EFFector-like and Terminally exhausted cells?
+wtEffExh<-glmTreat(fit, contrast =c(0,0,0,0,1,-1,0,-0), lfc = log2(1.2))
+topTags(wtEffExh)
+is.wtEffExh<-decideTestsDGE(wtEffExh)
+summary(is.wtEffExh) #yes, 2682 total, 2424 up, 258 down
+reswtEffExh<-as.data.frame(topTags(wtEffExh, n=2682))
+head(reswtEffExh)
+reswtEffExh$Geneid<-rownames(reswtEffExh)
+reswtEffExh.coord<-left_join(reswtEffExh, count[1:4],by="Geneid")
 
+##Are there differences between KO and WT progenitors?
+kowtprog<-glmTreat(fit, contrast = c(0,0,1,0,0,0,0,-1), lfc = log2(1.2))
+topTags(kowtprog)
+is.kowtprog<-decideTestsDGE(kowtprog)
+summary(is.kowtprog) #yes, 693, 647up, 46down
+reskowtprog<-as.data.frame(topTags(kowtprog, n=693))
+head(reskowtprog)
+reskowtprog$Geneid<-rownames(reskowtprog)
+reskowtprog.coord<-left_join(reskowtprog, count[1:4],by="Geneid")
+
+##Are there differences between KO and WT Ly108+CX3CR1+ cells?
+kowtdp<-glmTreat(fit, contrast = c(1,0,0,-1,0,0,0,0), lfc = log2(1.2))
+topTags(kowtdp)
+is.kowtdp<-decideTestsDGE(kowtdp)
+summary(is.kowtdp) #yes 2471, 1109up, 1362 down
+reskowtdp<-as.data.frame(topTags(kowtdp, n=2471))
+reskowtdp$Geneid<-rownames(reskowtdp)
+reskowtdp.coord<-left_join(reskowtdp, count[1:4],by="Geneid")
+
+##Are there differences between KO Ly108+CX3CR1+ and Progenitors?
+kodpprog<-glmQLFTest(fit, contrast = c(1,0,-1,0,0,0,0,0))
+topTags(kodpprog)
+is.kodpprog<-decideTestsDGE(kodpprog)
+summary(is.kodpprog) #yes 194, 34up and 160down
+reskodpprog<-as.data.frame(topTags(kodpprog, n=194))
+reskodpprog$Geneid<-rownames(reskodpprog)
+reskodpprog.coord<-left_join(reskodpprog, count[1:4],by="Geneid")
+
+##Are there differences between WT Effectors and Progenitors?
+wtprogeff<-glmTreat(fit, contrast = c(0,0,0,0,1,0,0,-1), lfc=log2(1.2))
+topTags(wtprogeff)
+is.wtprogeff<-decideTestsDGE(wtprogeff)
+summary(is.wtprogeff) #yes 9368, 5414up and 3954 down
+reswtprogeff<-as.data.frame(topTags(wtprogeff, n=9368))
+reswtprogeff$Geneid<-rownames(reswtprogeff)
+reswtprogeff.coord<-left_join(reswtprogeff, count[1:4],by="Geneid")
+
+##Are there differences between WT Progenitors and Terminally Exhausted?
+wtprogexh<-glmTreat(fit, contrast = c(0,0,0,0,0,1,0,-1), lfc=log2(1.2))
+topTags(wtprogexh)
+is.wtprogexh<-decideTestsDGE(wtprogexh)
+summary(is.wtprogexh) #8488 total, 3181 up, 5307 down
+reswtprogexh<-as.data.frame(topTags(wtprogexh, n=8488))
+reswtprogexh$Geneid<-rownames(reswtprogexh)
+reswtprogexh.coord<-left_join(reswtprogexh, count[1:4], by="Geneid")
+
+##Are there differences between KO and WT naive cells?
+kowtnaive<-glmTreat(fit, contrast =c(0,1,0,0,0,0,-1,0), lfc=log2(1.2))
+topTags(kowtnaive)
+is.kowtnaive<-decideTestsDGE(kowtnaive)
+summary(is.kowtnaive) #only 2up
+reskowtnaive<-as.data.frame(topTags(kowtnaive, n=2))
+head(reskowtnaive)
+reskowtnaive$Geneid<-rownames(reskowtnaive)
+reskowtnaive.coord<-left_join(reskowtnaive, count[1:4],by="Geneid")
+
+##Are there differences between WT Ly108+CX3CR1+ and Effector-like cells?
+wtdpeff<-glmTreat(fit, contrast = c(0,0,0,1,-1,0,0,0), lfc=log2(1.2))
+topTags(wtdpeff)
+is.wtdpeff<-decideTestsDGE(wtdpeff)
+summary(is.wtdpeff) #only 7up
+reswtdpeff<-as.data.frame(topTags(wtdpeff, n=7))
+head(reswtdpeff)
+reswtdpeff$Geneid<-rownames(reswtdpeff)
+reswtdpeff.coord<-left_join(reswtdpeff, count[1:4],by="Geneid")
+##Note, not enough power to detect differences between WT Ly108+CX3CR1+ and Effector-like cells based on glmTreat analysis
+
+##subset upregulated and downregulated DARs
 reswtdpprogUP<-reswtdpprog.coord[reswtdpprog.coord$logFC>0,]
-
 reswtdpprogDOWN<-reswtdpprog.coord[reswtdpprog.coord$logFC<0,]
 
- 
+reswtdpexhUP<-reswtdpexh.coord[reswtdpexh.coord$logFC>0,]
+reswtdpexhDOWN<-reswtdpexh.coord[reswtdpexh.coord$logFC<0,]
 
-##create GRanges objects for all Up and DOWN DACRs
+reskowtprogUP<-reskowtprog.coord[reskowtprog.coord$logFC>0,]
+reskowtprogDOWN<-reskowtprog.coord[reskowtprog.coord$logFC<0,]
 
+reskowtdpUP<-reskowtdp.coord[reskowtdp.coord$logFC>0,]
+reskowtdpDOWN<-reskowtdp.coord[reskowtdp.coord$logFC<0,]
+
+reskodpprogUP<-reskodpprog.coord[reskodpprog.coord$logFC>0,]
+reskodpprogDOWN<-reskodpprog.coord[reskodpprog.coord$logFC<0,]
+
+reswtprogeffUP<-reswtprogeff.coord[reswtprogeff.coord$logFC>0,]
+reswtprogeffDOWN<-reswtprogeff.coord[reswtprogeff.coord$logFC<0,]
+
+reswtprogexhUP<-reswtprogexh.coord[reswtprogexh.coord$logFC>0,]
+reswtprogexhDOWN<-reswtprogexh.coord[reswtprogexh.coord$logFC<0,]
+
+##create GRanges objects for all Up and DOWN DARs
 grwtdpprogUP<-GRanges(seqnames=reswtdpprogUP$Chr, ranges=IRanges(reswtdpprogUP$Start, reswtdpprogUP$End), strand = "*", mcols=data.frame(peakID=reswtdpprogUP$Geneid))
-
 grwtdpprogDOWN<-GRanges(seqnames=reswtdpprogDOWN$Chr, ranges=IRanges(reswtdpprogDOWN$Start, reswtdpprogDOWN$End), strand = "*", mcols=data.frame(peakID=reswtdpprogDOWN$Geneid))
 
-grwtdpprog<-GRanges(seqnames=reswtdpprog.coord$Chr, ranges=IRanges(reswtdpprog.coord$Start, reswtdpprog.coord$End), strand = "*", mcols=data.frame(peakID=reswtdpprog.coord$Geneid))
+grwtdpexhUP<-GRanges(seqnames=reswtdpexhUP$Chr, ranges=IRanges(reswtdpexhUP$Start, reswtdpexhUP$End), strand = "*", mcols=data.frame(peakID=reswtdpexhUP$Geneid))
+grwtdpexhDOWN<-GRanges(seqnames=reswtdpexhDOWN$Chr, ranges=IRanges(reswtdpexhDOWN$Start, reswtdpexhDOWN$End), strand = "*", mcols=data.frame(peakID=reswtdpexhDOWN$Geneid))
 
- 
+grkowtprogUP<-GRanges(seqnames=reskowtprogUP$Chr, ranges=IRanges(reskowtprogUP$Start, reskowtprogUP$End), strand = "*", mcols=data.frame(peakID=reskowtprogUP$Geneid))
+grkowtprogDOWN<-GRanges(seqnames=reskowtprogDOWN$Chr, ranges=IRanges(reskowtprogDOWN$Start, reskowtprogDOWN$End), strand = "*", mcols=data.frame(peakID=reskowtprogDOWN$Geneid))
+
+grkowtdpUP<-GRanges(seqnames=reskowtdpUP$Chr, ranges=IRanges(reskowtdpUP$Start, reskowtdpUP$End), strand = "*", mcols=data.frame(peakID=reskowtdpUP$Geneid))
+grkowtdpDOWN<-GRanges(seqnames=reskowtdpDOWN$Chr, ranges=IRanges(reskowtdpDOWN$Start, reskowtdpDOWN$End), strand = "*", mcols=data.frame(peakID=reskowtdpDOWN$Geneid))
+
+grkodpprogUP<-GRanges(seqnames=reskodpprogUP$Chr, ranges=IRanges(reskodpprogUP$Start, reskodpprogUP$End), strand = "*", mcols=data.frame(peakID=reskodpprogUP$Geneid))
+grkodpprogDOWN<-GRanges(seqnames=reskodpprogDOWN$Chr, ranges=IRanges(reskodpprogDOWN$Start, reskodpprogDOWN$End), strand = "*", mcols=data.frame(peakID=reskodpprogDOWN$Geneid))
+
+grwtprogeffUP<-GRanges(seqnames=reswtprogeffUP$Chr, ranges=IRanges(reswtprogeffUP$Start, reswtprogeffUP$End), strand = "*", mcols=data.frame(peakID=reswtprogeffUP$Geneid))
+grwtprogeffDOWN<-GRanges(seqnames=reswtprogeffDOWN$Chr, ranges=IRanges(reswtprogeffDOWN$Start, reswtprogeffDOWN$End), strand = "*", mcols=data.frame(peakID=reswtprogeffDOWN$Geneid))
+
+grwtprogexhUP<-GRanges(seqnames=reswtprogexhUP$Chr, ranges=IRanges(reswtprogexhUP$Start, reswtprogexhUP$End), strand = "*", mcols=data.frame(peakID=reswtprogexhUP$Geneid))
+grwtprogexhDOWN<-GRanges(seqnames=reswtprogexhDOWN$Chr, ranges=IRanges(reswtprogexhDOWN$Start, reswtprogexhDOWN$End), strand = "*", mcols=data.frame(peakID=reswtprogexhDOWN$Geneid))
 
 ##get the annotation package the mouse mm10 genome
-
 txdb<-TxDb.Mmusculus.UCSC.mm10.knownGene
-
- 
 
 ##peak annotation with chipseeker
 
- 
-
 ##create annotated peaks
-
 annot_wtdpprogUP<-annotatePeak(grwtdpprogUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
-
 annot_wtdpprogDOWN<-annotatePeak(grwtdpprogDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
 
-annot_wtdpprog<-annotatePeak(grwtdpprog, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_wtdpexhUP<-annotatePeak(grwtdpexhUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_wtdpexhDOWN<-annotatePeak(grwtdpexhDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
 
- 
+annot_kowtprogUP<-annotatePeak(grkowtprogUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_kowtprogDOWN<-annotatePeak(grkowtprogDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+annot_kowtdpUP<-annotatePeak(grkowtdpUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_kowtdpDOWN<-annotatePeak(grkowtdpDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+annot_kodpprogUP<-annotatePeak(grkodpprogUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_kodpprogDOWN<-annotatePeak(grkodpprogDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+annot_wtprogeffUP<-annotatePeak(grwtprogeffUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_wtprogeffDOWN<-annotatePeak(grwtprogeffDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+annot_wtprogexhUP<-annotatePeak(grwtprogexhUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_wtprogexhDOWN<-annotatePeak(grwtprogexhDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
 
 ##create dataframe for annotated peaks
-
 dr_annot_wtdpprogUP<-as.data.frame(annot_wtdpprogUP)
-
 dr_annot_wtdpprogDOWN<-as.data.frame(annot_wtdpprogDOWN)
 
-dr_annot_wtdpprog<-as.data.frame(annot_wtdpprog)
+dr_annot_wtdpexhUP<-as.data.frame(annot_wtdpexhUP)
+dr_annot_wtdpexhDOWN<-as.data.frame(annot_wtdpexhDOWN)
 
- 
+dr_annot_kowtprogUP<-as.data.frame(annot_kowtprogUP)
+dr_annot_kowtprogDOWN<-as.data.frame(annot_kowtprogDOWN)
 
-##Generate plot annopie plots
+dr_annot_kowtdpUP<-as.data.frame(annot_kowtdpUP)
+dr_annot_kowtdpDOWN<-as.data.frame(annot_kowtdpDOWN)
 
+dr_annot_kodpprogUP<-as.data.frame(annot_kodpprogUP)
+dr_annot_kodpprogDOWN<-as.data.frame(annot_kodpprogDOWN)
+
+dr_annot_wtprogeffUP<-as.data.frame(annot_wtprogeffUP)
+dr_annot_wtprogeffDOWN<-as.data.frame(annot_wtprogeffDOWN)
+
+##plot annopie plots
 plotAnnoPie(annot_wtdpprogUP)
-
 plotAnnoPie(annot_wtdpprogDOWN)
 
- 
+plotAnnoPie(annot_wtdpexhUP)
+plotAnnoPie(annot_wtdpexhDOWN)
 
-##Determine GO enriched pathway
+plotAnnoPie(annot_kowtprogUP)
+plotAnnoPie(annot_kowtprogDOWN)
 
-pathway.GO_wtdpprogUP<-enrichGO(dr_annot_wtdpprogUP$geneId, org.Mm.eg.db, ont = "MF")
+plotAnnoPie(annot_kowtdpUP)
+plotAnnoPie(annot_kowtdpDOWN)
 
-pathway.GO_wtdpprogUP[1:20, c(1,2,7)]
+plotAnnoPie(annot_kodpprogUP)
+plotAnnoPie(annot_kodpprogDOWN)
 
- 
+plotAnnoPie(annot_wtprogeffUP)
+plotAnnoPie(annot_wtprogeffDOWN)
 
-##Generate dotplot of enriched pathway
+###Create GRanges object for overlap analysis
+grwtdpprog<-GRanges(seqnames=reswtdpprog.coord$Chr, ranges=IRanges(reswtdpprog.coord$Start, reswtdpprog.coord$End), strand = "*", mcols=data.frame(peakID=reswtdpprog.coord$Geneid))
+annot_wtdpprog<-annotatePeak(grwtdpprog, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+dr_annot_wtdpprog<-as.data.frame(annot_wtdpprog)
 
-dotplot(pathway.GO_wtdpprogUP, showCategory=15)
+grkodpprog<-GRanges(seqnames=reskodpprog.coord$Chr, ranges=IRanges(reskodpprog.coord$Start, reskodpprog.coord$End), strand = "*", mcols=data.frame(peakID=reskodpprog.coord$Geneid))
+annot_kodpprog<-annotatePeak(grkodpprog, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+dr_annot_kodpprog<-as.data.frame(annot_kodpprog)
 
- 
+grkowtprog<-GRanges(seqnames=reskowtprog.coord$Chr, ranges=IRanges(reskowtprog.coord$Start, reskowtprog.coord$End), strand = "*", mcols=data.frame(peakID=reskowtprog.coord$Geneid))
+annot_kowtprog<-annotatePeak(grkowtprog, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+dr_annot_kowtprog<-as.data.frame(annot_kowtprog)
 
-##Generate venn diagram
+grkowtdp<-GRanges(seqnames=reskowtdp.coord$Chr, ranges=IRanges(reskowtdp.coord$Start, reskowtdp.coord$End), strand = "*", mcols=data.frame(peakID=reskowtdp.coord$Geneid))
+annot_kowtdp<-annotatePeak(grkowtdp, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+dr_annot_kowtdp<-as.data.frame(annot_kowtdp)
 
-listsssb<-as.list(c(annot_wtdpprogUP,annot_wtdpprogDOWN, annot_wtprogeff))
+grwtprogeff<-GRanges(seqnames=reswtprogeff.coord$Chr, ranges=IRanges(reswtprogeff.coord$Start, reswtprogeff.coord$End), strand="*", mcols=data.frame(peakID=reswtprogeff.coord$Geneid))
+annot_wtprogeff<-annotatePeak(grwtprogeff,tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db"  )
+dr_annot_wtprogeff<-as.data.frame(annot_wtprogeff)
+colnames(dr_annot_wtprogeff)[6]<-"Geneid"
+dr_annot_wtprogeff<-left_join(dr_annot_wtprogeff, reswtprogeff[1:6], by="Geneid")
 
-names(listsssb)<-c("DPvsProg-UP", "DPvsProg-DOWN", "EffvsProg")
-
-genessb<-lapply(listsssb, function(i) as.data.frame(i)$mcols.peakID )
-
-p1<-ggVennDiagram(genessb,label ="count",set_color=c("blue", "red", "black"),set_size = 8, label_size =8, edge_size = 1)
-
+##Generate Venn diagram
+listsss<-as.list(c(annot_wtdpprogUP,annot_wtdpprogDOWN, annot_wtprogeff))
+names(listsss)<-c("Ly108+CX3CR1+ vs Prog-UP", "Ly108+CX3CR1+ vs Prog-DOWN", "Effector vs Prog")
+geness<-lapply(listsss, function(i) as.data.frame(i)$mcols.peakID )
+p1<-ggVennDiagram(geness,label ="count",set_color=c("blue", "red", "black"),set_size = 8, label_size =8, edge_size = 1)
 p1+ scale_x_continuous(expand = expansion(mult = .4))+scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")
 
- 
+listsssb<-as.list(c(annot_kowtprog,annot_kowtdp, annot_wtprogeff))
+names(listsssb)<-c("KO vs WT Prog", "KO vs WT Ly108+CX3CR1+","WT Effector vs Prog")
+genessb<-lapply(listsssb, function(i) as.data.frame(i)$mcols.peakID )
+p2<-ggVennDiagram(genessb,label ="count",set_color=c("blue", "red", "black"),set_size = 8, label_size =8, edge_size = 1)
+p2+ scale_x_continuous(expand = expansion(mult = .4))+scale_fill_gradient(low = "#F4FAFE", high = "#4981BF")
 
-##Identify regions that are different in the EffvsProg and DPvsProg comparison
+##Identify DACRs that are unique to formation of Effector compared to Ly108+CX3CR1+ cell based on venn diagram 
+dr_annot_wtprogefftest<-dr_annot_wtprogeff[1:18]
+colnames(dr_annot_wtdpprogUP)[6]<-"Geneid"
+colnames(dr_annot_wtdpprogDOWN)[6]<-"Geneid"
+WTDPvsEffvenn<-setdiff(dr_annot_wtprogefftest, union(dr_annot_wtdpprogUP, dr_annot_wtdpprogDOWN))
+WTDPvsEffvenn<-left_join(WTDPvsEffvenn, reswtprogeff[1:6], by="Geneid")
 
-check<-setdiff(dr_annot_wtprogeff, dr_annot_wtdpprog)
+##Identify DACRS in Gfi1-cKO progenitors and Ly108+CX3CR1+ cells and that are differentially accessible between WT progenitors and effector cells
+checkcheckcheck<-intersect(dr_annot_kowtprog[,1:18], union(dr_annot_wtdpprog[,1:18], dr_annot_wtprogeff[,1:18]))
+checkcheckcheck2<-intersect(dr_annot_kowtdp[,1:18], union(dr_annot_wtdpprog, dr_annot_wtprogeff[,1:18]))
+allthings<-union(checkcheckcheck, checkcheckcheck2)
 
-colnames(check)[6]<-"Geneid"
+##Identify DACRS in Gfi1-cKO progenitors and Ly108+CX3CR1+ cells and that are differentially accessible between WT progenitors and effector cells
+allthingsUP<-union(dr_annot_kowtprogUP, dr_annot_kowtdpUP)
+allthingsDOWN<-union(dr_annot_kowtprogDOWN, dr_annot_kowtdpDOWN)
 
-check<-left_join(check, reswtprogeff[1:6], by="Geneid")
+##create upregualated and downregulated annotated peaks for differences between Ly108+Cx3C1+ and Effector
 
- 
+WTDPvsEffvennUP<-WTDPvsEffvenn[WTDPvsEffvenn$unshrunk.logFC>0,]
+WTDPvsEffvennDOWN<-WTDPvsEffvenn[WTDPvsEffvenn$unshrunk.logFC<0,]
 
-##Generate heatmap based on DACRs between DP and Progenitor cells
+gr_WTDPvsEffvenn<-GRanges(seqnames=WTDPvsEffvenn$seqnames, ranges=IRanges(WTDPvsEffvenn$start, WTDPvsEffvenn$end), strand = "*", mcols=data.frame(peakID=WTDPvsEffvenn$Geneid))
+grWTDPvsEffvennUP<-GRanges(seqnames=WTDPvsEffvennUP$seqnames, ranges=IRanges(WTDPvsEffvennUP$start, WTDPvsEffvennUP$end), strand = "*", mcols=data.frame(peakID=WTDPvsEffvennUP$Geneid))
+grWTDPvsEffvennDOWN<-GRanges(seqnames=WTDPvsEffvennDOWN$seqnames, ranges=IRanges(WTDPvsEffvennDOWN$start, WTDPvsEffvennDOWN$end), strand = "*", mcols=data.frame(peakID=WTDPvsEffvennDOWN$Geneid))
 
+annot_WTDPvsEffvenn<-annotatePeak(gr_WTDPvsEffvenn, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_WTDPvsEffvennUP<-annotatePeak(grWTDPvsEffvennUP, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+annot_WTDPvsEffvennDOWN<-annotatePeak(grWTDPvsEffvennDOWN, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+
+dr_annot_WTDPvsEffvenn<-as.data.frame(annot_WTDPvsEffvenn)
+dr_annot_WTDPvsEffvennUP<-as.data.frame(annot_WTDPvsEffvennUP)
+dr_annot_WTDPvsEffvennDOWN<-as.data.frame(annot_WTDPvsEffvennDOWN)
+
+plotAnnoPie(annot_WTDPvsEffvennUP)
+plotAnnoPie(annot_WTDPvsEffvennDOWN)
+
+##Annotate with logfold information
+colnames(dr_annot_wtdpprog)[6]<-"Geneid"
+dr_annot_wtdpprog<-left_join(dr_annot_wtdpprog, reswtdpprog[1:6], by="Geneid")
+
+colnames(dr_annot_wtEffExhDOWN)[6]<-"Geneid"
+colnames(dr_annot_wtEffExhUP)[6]<-"Geneid"
+colnames(reswtEffExh)[6]<-"Geneid"
+dr_annot_wtEffExhUP<-left_join(dr_annot_wtEffExhUP, reswtEffExh[1:6], by="Geneid")
+dr_annot_wtEffExhDOWN<-left_join(dr_annot_wtEffExhDOWN, reswtEffExh[1:6], by="Geneid")
+
+colnames(dr_annot_wtdpprogUP)[6]<-"Geneid"
+colnames(dr_annot_wtdpprogDOWN)[6]<-"Geneid"
+colnames(reswtdpprog)[6]<-"Geneid"
+dr_annot_wtdpprogUP<-left_join(dr_annot_wtdpprogUP, reswtdpprog[1:6], by="Geneid")
+dr_annot_wtdpprogDOWN<-left_join(dr_annot_wtdpprogDOWN, reswtdpprog[1:6], by="Geneid")
+
+colnames(dr_annot_kowtdpUP)[6]<-"Geneid"
+colnames(dr_annot_kowtdpDOWN)[6]<-"Geneid"
+dr_annot_kowtdpUP<-left_join(dr_annot_kowtdpUP, reskowtdp[1:6], by="Geneid")
+dr_annot_kowtdpDOWN<-left_join(dr_annot_kowtdpDOWN, reskowtdp[1:6], by="Geneid")
+
+colnames(dr_annot_kodpprogDOWN)[6]<-"Geneid"
+colnames(dr_annot_kodpprogUP)[6]<-"Geneid"
+dr_annot_kodpprogDOWN<-left_join(dr_annot_kodpprogDOWN, reskodpprog[1:6], by="Geneid")
+dr_annot_kodpprogUP<-left_join(dr_annot_kodpprogUP, reskodpprog[1:6], by="Geneid")
+
+colnames(dr_annot_kowtprogUP)[6]<-"Geneid"
+colnames(dr_annot_kowtprogDOWN)[6]<-"Geneid"
+dr_annot_kowtprogUP<-left_join(dr_annot_kowtprogUP, reskowtprog[1:6], by="Geneid")
+dr_annot_kowtprogDOWN<-left_join(dr_annot_kowtprogDOWN, reskowtprog[1:6], by="Geneid")
+
+##Differential analysis between all groups using a one-way analysis of deviance
+restrains<-makeContrasts(A1=WT_DP-WT_Prog, B1=WT_Eff-WT_DP, C1=WT_Exh-WT_DP, D1=WT_Eff-WT_Prog, E1=WT_Exh-WT_Eff, F1=WT_Exh-WT_Prog, G1=KO_Prog-WT_Prog,H1=KO_DP-WT_DP,J1=KO_DP-KO_Prog,levels=design)
+restrains5<-glmQLFTest(fit, contrast = restrains)
+is.restrains5<-decideTestsDGE(restrains5)
+summary(is.restrains5)  ##25425 regions significant
+df_restrains5<-as.data.frame(topTags(restrains5, n=25425))
+df_restrains5$Geneid<-rownames(df_restrains5)
+df_restrains5.coord<-left_join(df_restrains5, count[1:4], by="Geneid")
+grdf_restrains5.coord<-GRanges(seqnames=df_restrains5.coord$Chr, ranges=IRanges(df_restrains5.coord$Start, df_restrains5.coord$End), strand = "*", mcols=data.frame(peakID=df_restrains5.coord$Geneid))
+anno_restrains5<-annotatePeak(grdf_restrains5.coord, tssRegion = c(-3000, 3000), TxDb =txdb, annoDb = "org.Mm.eg.db" )
+df_annot_res5<-as.data.frame(anno_restrains5)
+colnames(df_annot_res5)[6]<-"Geneid"
+df_annot_res5<-left_join(df_annot_res5, df_restrains5[1:14], by="Geneid")
+
+##generate heatmaps
+##Fig 1C
 prpro<-cpm(Dats$counts[dr_annot_wtdpprog$Geneid,c(10,14,8,12,9,13,7,11)], prior.count = 2, log = TRUE)
+coolmap(prpro, show.dendrogram = "column", keysize=1.0, margins=c(7,5),labRow=FALSE, linkage.col = "none",labCol=FALSE, ColSideColors=c(rep("springgreen4",2),rep("mediumblue",2),rep("red",2),rep("black",2)),colsep=c(2,4,6),sepwidth=c(0.01,0.01))
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog","Ly108+CX3CR1+","Effector", "Term_Exh"), col = c("springgreen4","mediumblue","red"),fill=c("springgreen4","mediumblue","red"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
 
-coolmap(prpro, show.dendrogram = "column", keysize=1.0, margins=c(7,5),labRow=FALSE, linkage.col = "none",labCol=FALSE, ColSideColors=c(rep("springgreen4",2),rep("mediumblue",2),rep("red",2), rep("black",2)),colsep=c(2,4,6),sepwidth=c(0.01,0.01))
+##Fig 1E
+prpro2<-cpm(Dats$counts[dr_annot_WTDPvsEffvenn$mcols.peakID,c(10,14,8,12,9,13)], prior.count = 2, log = TRUE)
+coolmap(prpro2, show.dendrogram = "column", keysize=1.0, margins=c(7,5),labRow=FALSE, linkage.col = "none",labCol=FALSE, ColSideColors=c(rep("springgreen4",2),rep("mediumblue",2),rep("red",2)),colsep=c(2,4),sepwidth=c(0.01,0.01))
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog","Ly108+CX3CR1+","Effector",), col = c("springgreen4","mediumblue","red"),fill=c("springgreen4","mediumblue","red"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
 
-legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog","DP","Effector","Term_Exh"), col = c("springgreen4","mediumblue","red","black"),fill=c("springgreen4","mediumblue","red","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
+##FIg 4C
+prpro3<-cpm(Dats$counts[dr_annot_wtdpprog$Geneid,c(10,14,8,12,9,13,2,4,1,3)], prior.count = 2, log = TRUE)
+coolmap(prpro3, show.dendrogram = "column", keysize=1.0, margins=c(7,5),labRow=FALSE, linkage.col = "none",labCol=FALSE, ColSideColors=c(rep("springgreen4",2),rep("mediumblue",2),rep("red",2),rep("goldenrod",2),rep("black",2)),colsep=c(2,4,6),sepwidth=c(0.01,0.01))
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog(WT)","Ly108+CX3CR1+(WT)","Effector(WT)","Prog(KO)","Ly108+CX3CR1+(KO)" ), col = c("springgreen4","mediumblue","red","goldenrod","black"),fill=c("springgreen4","mediumblue","red","goldenrod","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
 
- 
+##Fig 4E
+prpro4<-cpm(Dats$counts[allthings$Geneid,c(10,14,8,12,9,13,2,4,1,3)], prior.count = 2, log = TRUE)
+coolmap(prpro4, show.dendrogram = "column", keysize=1.0, margins=c(7,5),labRow=FALSE, linkage.col = "none",labCol=FALSE, ColSideColors=c(rep("springgreen4",2),rep("mediumblue",2),rep("red",2),rep("goldenrod",2),rep("black",2)),colsep=c(2,4,6),sepwidth=c(0.01,0.01))
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Prog(WT)","Ly108+CX3CR1+(WT)","Effector(WT)","Prog(KO)","Ly108+CX3CR1+(KO)" ), col = c("springgreen4","mediumblue","red","goldenrod","black"),fill=c("springgreen4","mediumblue","red","goldenrod","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
 
-##Generate files for HOMER motif binding analysisof regions losing accessibility between DP and Progenitor
+##Fig #S4H
+prpro5<-cpm(Dats$counts[allthings$Geneid,c(15,16,10,14,8,12,9,13,5,6,2,4,1,3)], prior.count = 2, log = TRUE)
+coolmap(prpro5, show.dendrogram = "column", keysize=1.0, margins=c(7,5),labRow=FALSE, linkage.col = "none",labCol=FALSE, ColSideColors=c(rep("gray",2),rep("springgreen4",2),rep("mediumblue",2),rep("sienna1",2),rep("red",2),rep("goldenrod",2),rep("black",2)),colsep=c(2,4,6,8,10),sepwidth=c(0.01,0.01))
+legend(x="top",xpd=TRUE,inset=c(1,-0.07),ncol=4,cex=1,legend=c("Naive(WT)","Prog(WT)","Ly108+CX3CR1+(WT)","Effector(WT)","Naive(KO)","Prog(KO)","Ly108+CX3CR1+(KO)" ), col = c("gray","springgreen4","mediumblue","red","sienna1","goldenrod","black"),fill=c("gray","springgreen4","mediumblue","red","sienna1","goldenrod","black"),lty = 1,lwd = 3,bty = "n",x.intersp=1)
+
+##get downregulated regions from setdiff(wtprogeff, wtdpprog) for homer motif finding
+getdown<-dr_annot_dr_annot_WTDPvsEffvennDOWN
+getdown$test<-"NA"
+getdown$test[getdown$geneStrand==1]<-"+"
+getdown$test[getdown$geneStrand==2]<-"-"
+usedgetdown<-getdown[,c(6,1,2,3,19,4,5,7:18)]
+
+getup<-dr_annot_dr_annot_WTDPvsEffvennUP
+getup$test<-"NA"
+getup$test[getup$geneStrand==1]<-"+"
+getup$test[getup$geneStrand==2]<-"-"
+usedgetup<-getup[,c(6,1,2,3,19,4,5,7:18)]
+
+getdpprogUP<-dr_annot_wtdpprogUP
+getdpprogUP$test<-"NA"
+getdpprogUP$test[getdpprogUP$geneStrand==1]<-"+"
+getdpprogUP$test[getdpprogUP$geneStrand==2]<-"-"
+getdpprogUP<-getdpprogUP[,c(6,1,2,3,19,4,5,7:18)]
 
 getdpprogDOWN<-dr_annot_wtdpprogDOWN
-
 getdpprogDOWN$test<-"NA"
-
 getdpprogDOWN$test[getdpprogDOWN$geneStrand==1]<-"+"
-
 getdpprogDOWN$test[getdpprogDOWN$geneStrand==2]<-"-"
+getdpprogDOWN<-getdpprogDOWN[,c(6,1,2,3,19,4,5,7:18)]
+
+getexheffUP<-dr_annot_wtEffExhUP
+getexheffUP$test<-"NA"
+getexheffUP$test[getexheffUP$geneStrand==1]<-"+"
+getexheffUP$test[getexheffUP$geneStrand==2]<-"-"
+getexheffUP<-getexheffUP[,c(6,1,2,3,24,4,5,7:23)]
+
+getexheffDOWN<-dr_annot_wtEffExhDOWN
+getexheffDOWN$test<-"NA"
+getexheffDOWN$test[getexheffDOWN$geneStrand==1]<-"+"
+getexheffDOWN$test[getexheffDOWN$geneStrand==2]<-"-"
+getexheffDOWN<-getexheffDOWN[,c(6,1,2,3,24,4,5,7:23)]
+
+getkowtprogUP<-dr_annot_kowtprogUP
+getkowtprogUP$test<-"NA"
+getkowtprogUP$test[getkowtprogUP$geneStrand==1]<-"+"
+getkowtprogUP$test[getkowtprogUP$geneStrand==2]<-"-"
+getkowtprogUP<-getkowtprogUP[,c(6,1,2,3,24,4,5,7:23)]
+
+getkowtprogDOWN<-dr_annot_kowtprogDOWN
+getkowtprogDOWN$test<-"NA"
+getkowtprogDOWN$test[getkowtprogDOWN$geneStrand==1]<-"+"
+getkowtprogDOWN$test[getkowtprogDOWN$geneStrand==2]<-"-"
+getkowtprogDOWN<-getkowtprogDOWN[,c(6,1,2,3,24,4,5,7:23)]
+
+getkowtdpUP<-dr_annot_kowtdpUP
+getkowtdpUP$test<-"NA"
+getkowtdpUP$test[getkowtdpUP$geneStrand==1]<-"+"
+getkowtdpUP$test[getkowtdpUP$geneStrand==2]<-"-"
+getkowtdpUP<-getkowtdpUP[,c(6,1,2,3,24,4,5,7:23)]
+
+getkowtdpDOWN<-dr_annot_kowtdpDOWN
+getkowtdpDOWN$test<-"NA"
+getkowtdpDOWN$test[getkowtdpDOWN$geneStrand==1]<-"+"
+getkowtdpDOWN$test[getkowtdpDOWN$geneStrand==2]<-"-"
+getkowtdpDOWN<-getkowtdpDOWN[,c(6,1,2,3,24,4,5,7:23)]
+
+allthingsUP$test<-"NA"
+allthingsUP$test[allthingsUP$geneStrand==1]<-"+"
+allthingsUP$test[allthingsUP$geneStrand==2]<-"-"
+allthingsUP<-allthingsUP[,c(6,1,2,3,24,4,5,7:23)]
+
+allthingsDOWN$test<-"NA"
+allthingsDOWN$test[allthingsDOWN$geneStrand==1]<-"+"
+allthingsDOWN$test[allthingsDOWN$geneStrand==2]<-"-"
+allthingsDOWN<-allthingsDOWN[,c(6,1,2,3,24,4,5,7:23)]
+
 
 getdpprogDOWN<-getdpprogDOWN[,c(6,1,2,3,19,4,5,7:18)]
