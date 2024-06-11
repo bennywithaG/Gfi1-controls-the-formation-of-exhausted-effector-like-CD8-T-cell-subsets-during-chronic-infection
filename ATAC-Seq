@@ -479,6 +479,3 @@ allthingsDOWN$test<-"NA"
 allthingsDOWN$test[allthingsDOWN$geneStrand==1]<-"+"
 allthingsDOWN$test[allthingsDOWN$geneStrand==2]<-"-"
 allthingsDOWN<-allthingsDOWN[,c(6,1,2,3,24,4,5,7:23)]
-
-
-getdpprogDOWN<-getdpprogDOWN[,c(6,1,2,3,19,4,5,7:18)]
